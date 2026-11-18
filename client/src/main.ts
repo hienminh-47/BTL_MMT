@@ -1,6 +1,5 @@
 /** STUDENT-EDITABLE application entrypoint. Preserve game behavior. */
 import type { Snapshot, Welcome } from './core/contracts';
-import { getSessionToken } from './core/identity';
 import { ClientTransport } from './network/adapter';
 import { GameUI } from './ui/game';
 import { BrowserSimulator } from './ui/simulator';
