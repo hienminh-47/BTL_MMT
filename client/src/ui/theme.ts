@@ -14,7 +14,7 @@ export const RULES = {
 export const TEXT = {
   appName: 'Cá Lớn Nuốt Cá Bé',
   eyebrow: 'MẠNG MÁY TÍNH · BÀI TẬP LỚN 1',
-  tagline: 'Không sợ bố con thằng nào',
+  tagline: '[PLACEHOLDER_TGLINE]',
   creditName: 'Cân nặng',
   creditUnit: 'kg',
   cloakName: 'Phun mực',
@@ -29,14 +29,14 @@ export const TEXT = {
 } as const;
 
 export const HOW_TO_PLAY: { term: string; meaning: string }[] = [
-  { term: 'Con cá', meaning: `Mỗi người chơi là một con cá. ${TEXT.creditName} (${TEXT.creditUnit}) chính là credit.` },
+  { term: 'Cá', meaning: `Mỗi người chơi là một con cá. ${TEXT.creditName} (${TEXT.creditUnit}) chính là credit.` },
   { term: 'Ăn mồi', meaning: 'Càng nặng thì càng to và bơi càng chậm.' },
   { term: TEXT.cloakName, meaning: `Tàng hình ${RULES.cloakSeconds} giây, tốn ${RULES.cloakCost} ${TEXT.creditUnit}. Vẫn có thể bị nuốt khi đang tàng hình.` },
   { term: 'Nuốt', meaning: `Cá nặng hơn chạm vào cá nhẹ hơn thì nuốt được, nhận ${RULES.killPercent}% cân nặng của con mồi (làm tròn lên). Nặng bằng nhau thì không ai nuốt được ai.` },
   { term: 'Đói', meaning: `Mỗi ${RULES.decaySeconds} giây sụt ${RULES.decayPercent}% cân nặng (làm tròn lên).` },
   { term: TEXT.rejoin, meaning: `Bị nuốt thì nở lại với 0 ${TEXT.creditUnit}.` },
   { term: 'Vua đại dương', meaning: 'Con cá cuối cùng còn sống thắng vòng đó.' },
-  { term: 'Viền quanh cá', meaning: 'Đỏ: nặng hơn bạn, nên tránh. Xanh: nhẹ hơn bạn, nuốt được. Xám: nặng bằng nhau.' },
+  { term: 'Viền quanh cá', meaning: 'Xám: nặng bằng nhau. Xanh: Đối thủ nhẹ hơn, có thể nuốt. Đỏ: Quá nặng ký🐧. ' },
 ];
 
 export const TIERS: Record<Tier, { name: string; value: number; color: string }> = {
