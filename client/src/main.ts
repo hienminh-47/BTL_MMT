@@ -1,5 +1,6 @@
 /** STUDENT-EDITABLE application entrypoint. Preserve game behavior. */
 import type { Snapshot, Welcome } from './core/contracts';
+import { getSessionToken } from './core/identity';
 import { ClientTransport } from './network/adapter';
 import { GameUI } from './ui/game';
 import { BrowserSimulator } from './ui/simulator';
@@ -30,15 +31,16 @@ const network = new ClientTransport({
   },
   onPong(rttMs) { ui.setRtt(rttMs); },
   onStatus(status) {
-    if (status.startsWith('Disconnected') || status === 'Connection error') {
-      connected = false;
-    }
-    ui.setStatus(status);
+    if (status === 'Connecting...') ui.setConnection('connecting');
+    else if (status === 'Connected') ui.setConnection('connected');
+    else if (status.startsWith('Disconnected')) { connected = false; ui.setConnection('disconnected'); }
+    else if (status === 'Connection error') { connected = false; ui.setConnection('error'); }
+    else ui.showNotice(status);
   },
 });
 
-ui.onJoin((name, room) => { connected = false; network.connect({ name, room }); });
-ui.onLeave(() => { network.disconnect(); connected = false; ui.setStatus('Left game'); });
+ui.onJoin((name, room) => { connected = false; network.connect({ name, room, session: getSessionToken() }); });
+ui.onLeave(() => { network.disconnect(); connected = false; ui.setConnection('idle'); ui.showNotice('Left game'); });
 ui.onRejoin(() => network.rejoin());
 
 // Application generates player intent at a fixed rate; transport may decide
@@ -48,5 +50,4 @@ window.setInterval(() => {
   const { dx, dy, cloak } = ui.readInput();
   network.sendInput({ seq: ++seq, dx, dy, cloak });
 }, 100);
-
 ui.start();
