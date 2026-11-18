@@ -37,7 +37,11 @@ export class ClientTransport {
   private ownId = '';       // id của mình (từ welcome) để biết mình còn sống không
   private lastRound = -1;
 
-  constructor(hooks: NetworkHooks) { this.hooks = hooks; }
+  constructor(hooks: NetworkHooks) { 
+    this.hooks = hooks; 
+    // Đóng socket chủ động ngay khi người dùng Reload (F5) hoặc đóng tab
+    window.addEventListener('beforeunload', () => this.disconnect());
+  }
 
   // 1. Khởi tạo kết nối WebSocket mới tới máy chủ và đăng ký lắng nghe các sự kiện mạng
   connect({ name, room }: ConnectionOptions): void {

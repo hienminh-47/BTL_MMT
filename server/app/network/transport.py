@@ -110,16 +110,18 @@ class GameTransport:
                             session_token = data.get('session_token')
                             room_name = str(data.get('room', 'main'))
 
-                            # Lấy player_id tương ứng với session_token trong PHÒNG NÀY (nếu có)
-                            existing_pid = None
                             if session_token and session_token in self.service.sessions:
-                                existing_pid = self.service.sessions[session_token].get(room_name)
-
-                            # Kiểm tra nếu session này đã có socket kết nối active TRONG CÙNG PHÒNG ĐÓ (mở tab trùng lặp)
-                            if existing_pid and existing_pid in self.sockets and not self.sockets[existing_pid].closed:
-                                await ws.send_json({'type': 'error', 'message': 'Duplicate tab detected. Connection rejected.'})
-                                await ws.close()
-                                return ws
+                                has_active_tab = any(
+                                    (existing_ws := self.sockets.get(pid)) is not None and not existing_ws.closed
+                                    for pid in self.service.sessions[session_token].values()
+                                )
+                                if has_active_tab:
+                                    await ws.send_json({
+                                        'type': 'error',
+                                        'message': 'Duplicate tab detected. Another tab in this browser session is already in a room.'
+                                    })
+                                    await ws.close()
+                                    return ws
                             
                             welcome = self.service.join(
                                 str(data.get('name', ''))[:18],
