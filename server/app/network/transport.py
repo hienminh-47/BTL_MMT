@@ -12,6 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 from aiohttp import WSMsgType, web
 from .protocol import decode_message, encode_message, parse_input
+from .delta import DeltaEncoder   # encoder delta cho giao thức v2
 from ..game.service import GameService
 
 if TYPE_CHECKING:
@@ -26,10 +27,21 @@ class GameTransport:
         self.service = service
         self.simulator: SimulatorTransport | None = None
         self.sockets: dict[str, web.WebSocketResponse] = {}
+        # encoder delta theo player_id (chỉ có với client gửi proto=2 trong JOIN)
+        self.encoders: dict[str, DeltaEncoder] = {}
+        # bộ đếm byte phía server, để đối chiếu với số đo của bot (xem /metrics)
+        self.bytes_out = 0
+        self.msgs_out = 0
 
     # 2. Đăng ký định tuyến HTTP/WebSocket vào aiohttp web application
     def install_routes(self, app: web.Application) -> None:
         app.router.add_get('/ws', self.websocket)
+        app.router.add_get('/metrics', self.metrics)  
+
+    async def metrics(self, request: web.Request) -> web.Response:
+        """Số byte snapshot server đã gửi (payload UTF-8, chưa tính header WS/TCP)."""
+        return web.json_response({'bytes_out': self.bytes_out, 'msgs_out': self.msgs_out,
+                                  'clients': len(self.sockets)})
 
     # 3. Xử lý toàn bộ vòng đời kết nối WebSocket của một client (Handshake, nhận tin nhắn, xử lý logic, và dọn dẹp khi ngắt kết nối)
     async def websocket(self, request: web.Request) -> web.WebSocketResponse:
@@ -40,6 +52,7 @@ class GameTransport:
         player_id: str | None = None
         sim_run: str | None = None
         sim_actor: str | None = None
+        proto = 1   # 1 = baseline (snapshot đầy đủ), 2 = delta
         
         try:
             # Vòng lặp nhận dữ liệu
@@ -116,13 +129,21 @@ class GameTransport:
                                 session_token=session_token
                             )
                             player_id = welcome['id']
+                            # client xin giao thức v2 trong JOIN ("proto": 2).
+                            # Scenario mode (nhánh ctx ở trên) luôn dùng v1 -> kết quả kiểm thử không đổi.
+                            proto = 2 if data.get('proto') == 2 else 1
                             
                             
                         self.sockets[player_id] = ws
                         await ws.send_json(welcome)
                         snapshot = self.service.snapshot_for(player_id)
                         if snapshot is not None:
-                            await ws.send_json(snapshot)
+                            if proto == 2:
+                                # v2: gói đầu tiên luôn là bản FULL (seq=1)
+                                enc = self.encoders[player_id] = DeltaEncoder()
+                                await ws.send_str(encode_message(enc.next(snapshot)))
+                            else:
+                                await ws.send_json(snapshot)
                     
                     # Xử lý các tin nhắn ứng dụng khác (input, rejoin, leave, ping)        
                     elif kind == 'input' and player_id is not None:
@@ -134,10 +155,19 @@ class GameTransport:
                     elif kind == 'rejoin' and player_id is not None:
                         if not self.service.rejoin(player_id):
                             raise ValueError('Rejoin unavailable')
+                        # ván mới: ép gửi bản FULL ở lần publish kế tiếp
+                        if player_id in self.encoders:
+                            self.encoders[player_id].request_full()
                         
                     elif kind == 'leave' and player_id is not None and ctx:
                         self.service.leave(player_id)
                         
+                    elif kind == 'resync' and player_id is not None:
+                        # client phát hiện hụt seq -> xin bản FULL ở lần publish kế tiếp
+                        if player_id in self.encoders:
+                            self.encoders[player_id].request_full()
+                        continue
+
                     elif kind == 'ping':
                         nonce = data.get('nonce')
                         if isinstance(nonce, (float, int)) and not isinstance(nonce, bool):
@@ -158,6 +188,12 @@ class GameTransport:
         
         finally:
             if player_id:
+                # chỉ xoá encoder nếu socket đăng ký cho player_id vẫn là socket NÀY (hoặc đã mất).
+                # Nếu kết nối mới (reload/rejoin cùng session_token) đã thay thế, giữ encoder mới.
+                if self.sockets.get(player_id) in (ws, None):
+                    self.encoders.pop(player_id, None)
+                # dòng dưới xoá socket theo player_id mà không kiểm tra socket nào;
+                # nếu kết nối cũ đóng trễ sau khi kết nối mới đã join thì sẽ xoá nhầm kết nối mới.
                 self.sockets.pop(player_id, None)
                 self.service.leave(player_id)
         return ws
@@ -170,7 +206,12 @@ class GameTransport:
             if room and room in snapshots and not ws.closed:
                 snapshot = self.service.snapshot_for(player_id)
                 if snapshot is not None:
-                    jobs.append(ws.send_str(encode_message(snapshot)))
+                    # v2: gửi full/delta; v1: giữ nguyên baseline (snapshot đầy đủ)
+                    enc = self.encoders.get(player_id)
+                    payload = encode_message(enc.next(snapshot) if enc else snapshot)
+                    self.bytes_out += len(payload.encode('utf-8'))   # đếm byte
+                    self.msgs_out += 1
+                    jobs.append(ws.send_str(payload))
         if jobs:
             results = await asyncio.gather(*jobs, return_exceptions=True)
             for result in results:

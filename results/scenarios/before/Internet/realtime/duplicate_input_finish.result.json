@@ -1,0 +1,44 @@
+{
+  "format": "tag-lagged-browser-result-v1",
+  "run_id": "duplicate_input_finish",
+  "scenario": "duplicate-stale-input-finish",
+  "scenario_sha256": "db174eea92ee3d0fbe7a30962acbcb5d6eff82cf8f59ff76b020181eface7e5c",
+  "expected": {
+    "phase": "finished",
+    "round": 1,
+    "winner": "alice",
+    "players": {
+      "alice": {
+        "alive": true,
+        "credits": 0
+      }
+    }
+  },
+  "actual": {
+    "phase": "finished",
+    "round": 1,
+    "winner": "alice",
+    "players": {
+      "alice": {
+        "alive": true,
+        "credits": 0
+      }
+    }
+  },
+  "oracle_source": "local_reference",
+  "verdict": "PASS",
+  "differences": [],
+  "stats": {
+    "elapsed_seconds": 3.403,
+    "tick_count": 65,
+    "action_batches_received": 8,
+    "timeouts": 0,
+    "data_actions_confirmed": 8,
+    "late_data_actions": 8,
+    "browser_action_batches": 8,
+    "data_actions_expected": 8,
+    "tick_to_action_delivery_p50_ms": null,
+    "tick_to_action_delivery_p95_ms": null
+  },
+  "mode": "realtime"
+}
