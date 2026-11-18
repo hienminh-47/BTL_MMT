@@ -12,6 +12,7 @@ let playerId = '';
 let seq = 0;
 let connected = false;
 let mostRecentTick = -1;
+let replaced = false;
 
 const network = new ClientTransport({
   onWelcome(message: Welcome) {
@@ -30,10 +31,24 @@ const network = new ClientTransport({
   },
   onPong(rttMs) { ui.setRtt(rttMs); },
   onStatus(status) {
-    if (status === 'Connecting...') ui.setConnection('connecting');
+    if (status.includes('Duplicate tab detected')) {
+      replaced = true;
+      connected = false;
+      ui.setConnection('replaced');
+    }
+    else if (status === 'Connecting...') {
+      replaced = false;
+      ui.setConnection('connecting');
+    }
     else if (status === 'Connected') ui.setConnection('connected');
-    else if (status.startsWith('Disconnected')) { connected = false; ui.setConnection('disconnected'); }
-    else if (status === 'Connection error') { connected = false; ui.setConnection('error'); }
+    else if (status.startsWith('Disconnected')) { 
+      connected = false; 
+      if (!replaced) ui.setConnection('disconnected');
+    }
+    else if (status === 'Connection error') { 
+      connected = false; 
+      ui.setConnection('error'); 
+    }
     else ui.showNotice(status);
   },
 });
