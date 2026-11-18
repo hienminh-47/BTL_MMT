@@ -38,7 +38,7 @@ const network = new ClientTransport({
   },
 });
 
-ui.onJoin((name, room) => { connected = false; network.connect({ name, room, session: getSessionToken() }); });
+ui.onJoin((name, room) => { connected = false; network.connect({ name, room }); });
 ui.onLeave(() => { network.disconnect(); connected = false; ui.setConnection('idle'); ui.showNotice('Left game'); });
 ui.onRejoin(() => network.rejoin());
 
