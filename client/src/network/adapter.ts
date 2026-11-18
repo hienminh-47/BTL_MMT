@@ -3,7 +3,15 @@
  * preserving the public ClientTransport interface in main.ts.
  */
 import type { Action, ConnectionOptions, NetworkHooks, Welcome, Snapshot } from '../core/contracts';
-import { decodeServerMessage, encodeInput } from './protocol';
+import { decodeServerMessage, encodeInput, SnapshotAssembler } from './protocol';  // Thêm SnapshotAssembler
+
+//   Chọn chế độ bằng URL để chạy baseline/improved trên CÙNG một bản build:
+//   ?proto=1 -> snapshot đầy đủ (baseline) | mặc định -> proto 2 (delta)
+//   ?input=periodic -> gửi INPUT mỗi lần game gọi (baseline) | mặc định -> chỉ gửi khi đổi hướng
+const QUERY = new URLSearchParams(location.search);
+const PROTO: 1 | 2 = QUERY.get('proto') === '1' ? 1 : 2;
+const INPUT_ON_CHANGE = QUERY.get('input') !== 'periodic';
+const INPUT_KEEPALIVE_MS = 1000;   // vẫn gửi lại input giống cũ mỗi 1s để chịu mất gói
 
 // Hàm sinh/lấy session_token cố định cho trình duyệt
 function getSessionToken(): string {
@@ -21,14 +29,23 @@ export class ClientTransport {
   private socket: WebSocket | null = null;
   private probe: number | undefined;
   private hooks: NetworkHooks;
+  // Trạng thái cho delta và cho input-khi-đổi
+  private assembler = new SnapshotAssembler();
+  private lastResync = 0;
+  private lastInputKey = '';
+  private lastInputAt = 0;
+  private ownId = '';       // id của mình (từ welcome) để biết mình còn sống không
+  private lastRound = -1;
 
   constructor(hooks: NetworkHooks) { this.hooks = hooks; }
 
   // 1. Khởi tạo kết nối WebSocket mới tới máy chủ và đăng ký lắng nghe các sự kiện mạng
   connect({ name, room }: ConnectionOptions): void {
     this.disconnect();
+    this.assembler.reset();          // Kết nối mới -> chờ bản full đầu tiên (kể cả reload/rejoin cùng session_token)
+    this.lastInputKey = '';
+    this.lastRound = -1;
     const sessionToken = getSessionToken(); // Lấy session_token từ localStorage
-    // Tạo động đường dẫn kết nối WebSocket
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${scheme}//${location.host}/ws`;
     const socket = new WebSocket(url);
@@ -37,7 +54,7 @@ export class ClientTransport {
 
     socket.onopen = () => {
       // Gửi kèm session_token trong gói tin join
-      socket.send(JSON.stringify({ type: 'join', name, room, session_token: sessionToken }));
+      socket.send(JSON.stringify({ type: 'join', name, room, session_token: sessionToken, proto: PROTO }));   // Thêm proto
       this.hooks.onStatus('Connected');
       this.probe = window.setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -49,8 +66,13 @@ export class ClientTransport {
     socket.onmessage = (event: MessageEvent<string>) => {
       const msg = decodeServerMessage(event.data);
       if (!msg) return;
-      if (msg.type === 'welcome') this.hooks.onWelcome(msg);
-      if (msg.type === 'snapshot') this.hooks.onSnapshot(msg);
+      if (msg.type === 'welcome') { this.ownId = msg.id; this.hooks.onWelcome(msg); }   // Lưu id
+      // Snapshot/delta đều qua assembler; hụt seq thì xin resync
+      if (msg.type === 'snapshot' || msg.type === 'delta') {
+        const { snapshot, needResync } = this.assembler.accept(msg);
+        if (snapshot) { this.hooks.onSnapshot(snapshot); this.rearmInput(snapshot); }
+        if (needResync) this.requestResync();
+      }
       if (msg.type === 'pong') this.hooks.onPong(Math.max(0, performance.now() - msg.nonce));
       if (msg.type === 'error') this.hooks.onStatus(`Server error: ${msg.message}`);
     };
@@ -62,14 +84,43 @@ export class ClientTransport {
     socket.onerror = () => this.hooks.onStatus('Connection error');
   }
 
+  // Chỉ gửi INPUT khi đổi hướng / có cloak / quá INPUT_KEEPALIVE_MS.
+  // `seq` do game tăng, ta chỉ bỏ bớt lần gửi nên seq vẫn tăng dần (engine loại input có seq <= đã nhận).
   sendInput(action: Action): void {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(encodeInput(action));
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (INPUT_ON_CHANGE) {
+      const key = `${action.dx},${action.dy}`;
+      const cloak = Boolean(action.cloak);
+      const now = performance.now();
+      if (!cloak && key === this.lastInputKey && now - this.lastInputAt < INPUT_KEEPALIVE_MS) return;
+      this.lastInputKey = key;
+      this.lastInputAt = now;
+    }
+    this.socket.send(encodeInput(action));
+  }
+
+  // engine.py: _start_round()/rejoin() đặt lại dx,dy=0 và accept_input() bỏ input khi
+  // phase != 'running'. Nếu không "nạp lại" thì người đang giữ phím sẽ đứng yên tới 1 s (keepalive).
+  private rearmInput(snapshot: Snapshot): void {
+    const me = snapshot.players.find(p => p.id === this.ownId);
+    if (snapshot.phase !== 'running' || snapshot.round !== this.lastRound || me?.alive === false) {
+      this.lastInputKey = '';
+    }
+    this.lastRound = snapshot.round;
+  }
+
+  // xin server gửi lại bản FULL (tối đa 2 lần/giây để không dội server)
+  private requestResync(): void {
+    const now = performance.now();
+    if (now - this.lastResync < 500) return;
+    this.lastResync = now;
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'resync' }));
   }
 
   rejoin(): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'rejoin' }));
   }
-
+  
   disconnect(): void {
     this.clearProbe();
     const previous = this.socket;
@@ -107,7 +158,6 @@ export class ScenarioDataTransport {
   private ensureSocket(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return Promise.resolve();
     if (this.opening) return this.opening;
-    // Tạo động đường dẫn kết nối WebSocket
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(scheme + '//' + location.host + '/ws');
     this.socket = ws;
