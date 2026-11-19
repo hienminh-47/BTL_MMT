@@ -1,0 +1,73 @@
+{
+  "name": "terminal-winner",
+  "room": "terminal-outcome",
+  "mode": "live",
+  "url": "wss://btl-mmt-2.onrender.com/ws",
+  "profile": {
+    "delay_ms": 120.0,
+    "jitter_ms": 50.0,
+    "drop_rate": 0.2,
+    "duplicate_rate": 0.1
+  },
+  "intended_ticks": 42,
+  "clients": 2,
+  "input": {
+    "sent": 0,
+    "dropped": 2,
+    "duplicated": 0,
+    "delayed": 0
+  },
+  "observed": {
+    "alice": {
+      "snapshots": 27,
+      "first_tick": 0,
+      "last_tick": 51,
+      "last_phase": "finished"
+    },
+    "bob": {
+      "snapshots": 5,
+      "first_tick": 7,
+      "last_tick": 15,
+      "last_phase": "running"
+    }
+  },
+  "final_result": {
+    "phase": "finished",
+    "round": 1,
+    "winner": "alice",
+    "players": {
+      "alice": {
+        "alive": true,
+        "credits": 0
+      }
+    }
+  },
+  "final_comparison": {
+    "status": "pass",
+    "matches_oracle": true,
+    "differences": [],
+    "expected": {
+      "phase": "finished",
+      "round": 1,
+      "winner": "alice",
+      "players": {
+        "alice": {
+          "alive": true,
+          "credits": 0
+        }
+      }
+    },
+    "observed": {
+      "phase": "finished",
+      "round": 1,
+      "winner": "alice",
+      "players": {
+        "alice": {
+          "alive": true,
+          "credits": 0
+        }
+      }
+    }
+  },
+  "errors": []
+}
