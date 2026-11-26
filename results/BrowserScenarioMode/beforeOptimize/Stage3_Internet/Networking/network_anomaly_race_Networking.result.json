@@ -1,0 +1,44 @@
+{
+  "format": "tag-lagged-browser-result-v1",
+  "run_id": "class-test-01",
+  "scenario": "network-anomaly-race",
+  "scenario_sha256": "4bc877ed1429a3754ccddfe9c856ed97b8b7185e6787d100d44ce480cd3844a4",
+  "expected": {
+    "phase": "finished",
+    "round": 1,
+    "winner": "alice",
+    "players": {
+      "alice": {
+        "alive": true,
+        "credits": 0
+      }
+    }
+  },
+  "actual": {
+    "phase": "finished",
+    "round": 1,
+    "winner": "alice",
+    "players": {
+      "alice": {
+        "alive": true,
+        "credits": 0
+      }
+    }
+  },
+  "oracle_source": "local_reference",
+  "verdict": "PASS",
+  "differences": [],
+  "stats": {
+    "elapsed_seconds": 2.652,
+    "tick_count": 50,
+    "action_batches_received": 9,
+    "timeouts": 0,
+    "data_actions_confirmed": 9,
+    "late_data_actions": 9,
+    "browser_action_batches": 9,
+    "data_actions_expected": 9,
+    "tick_to_action_delivery_p50_ms": null,
+    "tick_to_action_delivery_p95_ms": null
+  },
+  "mode": "realtime"
+}
